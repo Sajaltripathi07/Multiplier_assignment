@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Data Pipeline Dashboard (React)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script
+      crossorigin
+      src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"
+    ></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+      body {
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+          sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #020617;
+        color: #e5e7eb;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+      }
+      header {
+        padding: 1rem 2rem;
+        background: linear-gradient(to right, #1d4ed8, #06b6d4);
+        color: white;
+        box-shadow: 0 10px 25px rgba(15, 23, 42, 0.6);
+        z-index: 10;
+      }
+      header h1 {
+        margin: 0;
+        font-size: 2rem;
+        letter-spacing: 0.03em;
+      }
+      main {
+        flex: 1;
+        padding: 1.5rem 2rem;
+        display: flex;
+      }
+      #root {
+        flex: 1;
+        display: flex;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-rows: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem;
+        width: 100%;
+        height: 100%;
+        align-items: stretch;
+      }
+      .card {
+        background: radial-gradient(circle at top left, #0b1120, #020617);
+        border-radius: 0.9rem;
+        padding: 1.1rem;
+        box-shadow: 0 18px 45px rgba(15, 23, 42, 0.8);
+        border: 1px solid #1e293b;
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        min-height: 260px;
+      }
+      .card h2 {
+        font-size: 1.3rem;
+        margin-top: 0;
+        margin-bottom: 0.75rem;
+        color: #e5e7eb;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.95rem;
+      }
+      th,
+      td {
+        padding: 0.35rem 0.5rem;
+        text-align: left;
+        border-bottom: 1px solid #1e293b;
+      }
+      th {
+        cursor: pointer;
+        color: #93c5fd;
+      }
+      tr:nth-child(even) td {
+        background-color: #020617;
+      }
+      .badge {
+        display: inline-block;
+        padding: 0.1rem 0.5rem;
+        border-radius: 999px;
+        font-size: 0.7rem;
+      }
+      .badge-ok {
+        background-color: #16a34a33;
+        color: #4ade80;
+      }
+      .badge-warn {
+        background-color: #b91c1c33;
+        color: #fca5a5;
+      }
+      .status {
+        font-size: 0.85rem;
+        margin-bottom: 0.5rem;
+        color: #9ca3af;
+      }
+      .search-input {
+        width: 100%;
+        padding: 0.4rem 0.6rem;
+        border-radius: 999px;
+        border: 1px solid #1e293b;
+        background-color: #020617;
+        color: #e5e7eb;
+        font-size: 0.8rem;
+        margin-bottom: 0.5rem;
+      }
+      .filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        margin-bottom: 0.75rem;
+        align-items: center;
+      }
+      .filters label {
+        font-size: 0.8rem;
+        color: #9ca3af;
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+      }
+      .filters select {
+        padding: 0.25rem 0.5rem;
+        border-radius: 999px;
+        border: 1px solid #1e293b;
+        background-color: #020617;
+        color: #e5e7eb;
+        font-size: 0.8rem;
+      }
+      button {
+        border-radius: 999px;
+        border: 1px solid #1e293b;
+        background: #1d4ed8;
+        color: white;
+        padding: 0.2rem 0.7rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+      }
+      @media (max-width: 480px) {
+        header h1 {
+          font-size: 1.2rem;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Customer Revenue Dashboard (React)</h1>
+    </header>
+    <main>
+      <div id="root"></div>
+    </main>
+
+    <script type="text/babel">
+      const { useState, useEffect, useMemo, useRef } = React;
+      const API_BASE = "http://localhost:8000";
+      const MONTH_NAMES = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+
+      async function fetchJson(path) {
+        const res = await fetch(`${API_BASE}${path}`);
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return res.json();
+      }
+
+      function RevenueCard() {
+        const [data, setData] = useState([]);
+        const [filtered, setFiltered] = useState([]);
+        const [years, setYears] = useState([]);
+        const [year, setYear] = useState("");
+        const [fromMonth, setFromMonth] = useState("");
+        const [toMonth, setToMonth] = useState("");
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState("");
+        const chartRef = useRef(null);
+        const chartInstanceRef = useRef(null);
+
+        useEffect(() => {
+          let cancelled = false;
+          setLoading(true);
+          fetchJson("/api/revenue")
+            .then((d) => {
+              if (cancelled) return;
+              const withParts = d.map((row) => {
+                const [y, m] = String(row.order_year_month).split("-");
+                return { ...row, year: y, month: m };
+              });
+              const sorted = withParts.sort((a, b) =>
+                String(a.year + a.month).localeCompare(String(b.year + b.month))
+              );
+              const uniqueYears = Array.from(new Set(sorted.map((r) => r.year)));
+              const defaultYear = uniqueYears[0] || "";
+              const monthsForYear = Array.from(
+                new Set(
+                  sorted
+                    .filter((r) => !defaultYear || r.year === defaultYear)
+                    .map((r) => r.month)
+                )
+              ).sort();
+              const defaultFrom = monthsForYear[0] || "";
+              const defaultTo =
+                monthsForYear[monthsForYear.length - 1] || defaultFrom;
+
+              const initialFiltered = sorted.filter((r) => {
+                if (defaultYear && r.year !== defaultYear) return false;
+                if (defaultFrom && r.month < defaultFrom) return false;
+                if (defaultTo && r.month > defaultTo) return false;
+                return true;
+              });
+
+              setData(sorted);
+              setYears(uniqueYears);
+              setYear(defaultYear);
+              setFromMonth(defaultFrom);
+              setToMonth(defaultTo);
+              setFiltered(initialFiltered);
+              setError("");
+            })
+            .catch((e) => {
+              if (cancelled) return;
+              setError(`Failed to load (${e.message})`);
+            })
+            .finally(() => {
+              if (!cancelled) setLoading(false);
+            });
+          return () => {
+            cancelled = true;
+          };
+        }, []);
+
+        useEffect(() => {
+          if (!chartRef.current) return;
+          const labels = filtered.map((d) => {
+            const monthIndex = Number(d.month) - 1;
+            const monthName =
+              MONTH_NAMES[monthIndex] || String(d.month || "").padStart(2, "0");
+            return `${monthName} ${d.year}`;
+          });
+          const values = filtered.map((d) => Number(d.total_revenue));
+
+          if (chartInstanceRef.current) {
+            chartInstanceRef.current.data.labels = labels;
+            chartInstanceRef.current.data.datasets[0].data = values;
+            chartInstanceRef.current.update();
+            return;
+          }
+
+          chartInstanceRef.current = new Chart(chartRef.current, {
+            type: "line",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "Revenue",
+                  data: values,
+                  borderColor: "#60a5fa",
+                  backgroundColor: "rgba(96, 165, 250, 0.25)",
+                  pointRadius: 4,
+                  pointHoverRadius: 6,
+                  tension: 0.25,
+                  fill: true,
+                },
+              ],
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: "#9ca3af" } },
+                y: { ticks: { color: "#9ca3af" } },
+              },
+            },
+          });
+        }, [filtered]);
+
+        useEffect(() => {
+          return () => {
+            if (chartInstanceRef.current) {
+              chartInstanceRef.current.destroy();
+            }
+          };
+        }, []);
+
+        const monthsForYear = useMemo(() => {
+          const subset = data.filter((r) => (year ? r.year === year : true));
+          return Array.from(new Set(subset.map((r) => r.month))).sort();
+        }, [data, year]);
+
+        useEffect(() => {
+          if (!monthsForYear.length) return;
+          if (!fromMonth || !monthsForYear.includes(fromMonth)) {
+            setFromMonth(monthsForYear[0]);
+          }
+          if (!toMonth || !monthsForYear.includes(toMonth)) {
+            setToMonth(monthsForYear[monthsForYear.length - 1]);
+          }
+        }, [monthsForYear]);
+
+        const applyFilter = () => {
+          let result = [...data];
+          if (year) {
+            result = result.filter((d) => d.year === year);
+          }
+          if (fromMonth) {
+            result = result.filter((d) => d.month >= fromMonth);
+          }
+          if (toMonth) {
+            result = result.filter((d) => d.month <= toMonth);
+          }
+          setFiltered(result);
+        };
+
+        return (
+          <section className="card">
+            <h2>Revenue Trend</h2>
+            <div className="filters">
+              <label>
+                Year
+                <select
+                  value={year}
+                  onChange={(e) => setYear(e.target.value)}
+                >
+                  {years.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                From
+                <select
+                  value={fromMonth}
+                  onChange={(e) => setFromMonth(e.target.value)}
+                >
+                  {monthsForYear.map((m) => (
+                    <option key={m} value={m}>
+                      {MONTH_NAMES[Number(m) - 1]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                To
+                <select
+                  value={toMonth}
+                  onChange={(e) => setToMonth(e.target.value)}
+                >
+                  {monthsForYear.map((m) => (
+                    <option key={m} value={m}>
+                      {MONTH_NAMES[Number(m) - 1]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button onClick={applyFilter}>Apply</button>
+            </div>
+            <div className="status">
+              {loading && "Loading revenue data…"}
+              {!loading && error && (
+                <span style={{ color: "#fca5a5" }}>{error}</span>
+              )}
+              {!loading && !error && filtered.length === 0 && (
+                <span>No revenue in selected range.</span>
+              )}
+            </div>
+            <canvas ref={chartRef} height="160" />
+          </section>
+        );
+      }
+
+      function TopCustomersCard() {
+        const [rows, setRows] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState("");
+        const [search, setSearch] = useState("");
+        const [sortKey, setSortKey] = useState("total_spend");
+        const [sortAsc, setSortAsc] = useState(false);
+
+        useEffect(() => {
+          let cancelled = false;
+          setLoading(true);
+          fetchJson("/api/top-customers")
+            .then((d) => {
+              if (cancelled) return;
+              setRows(d);
+              setError("");
+            })
+            .catch((e) => {
+              if (cancelled) return;
+              setError(`Failed to load (${e.message})`);
+            })
+            .finally(() => {
+              if (!cancelled) setLoading(false);
+            });
+          return () => {
+            cancelled = true;
+          };
+        }, []);
+
+        const filteredSorted = useMemo(() => {
+          let result = rows;
+          if (search) {
+            const q = search.toLowerCase();
+            result = result.filter(
+              (c) =>
+                String(c.name).toLowerCase().includes(q) ||
+                String(c.region).toLowerCase().includes(q)
+            );
+          }
+          result = [...result].sort((a, b) => {
+            const va = a[sortKey];
+            const vb = b[sortKey];
+            if (va < vb) return sortAsc ? -1 : 1;
+            if (va > vb) return sortAsc ? 1 : -1;
+            return 0;
+          });
+          return result;
+        }, [rows, search, sortKey, sortAsc]);
+
+        const onHeaderClick = (key) => {
+          if (sortKey === key) {
+            setSortAsc((prev) => !prev);
+          } else {
+            setSortKey(key);
+            setSortAsc(key === "name" || key === "region");
+          }
+        };
+
+        return (
+          <section className="card">
+            <h2>Top Customers</h2>
+            <input
+              className="search-input"
+              type="text"
+              placeholder="Search by name or region…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <div className="status">
+              {loading && "Loading customers…"}
+              {!loading && error && <span style={{ color: "#fca5a5" }}>{error}</span>}
+            </div>
+            <div style={{ maxHeight: 260, overflow: "auto" }}>
+              <table>
+                <thead>
+                  <tr>
+                    <th onClick={() => onHeaderClick("name")}>Name</th>
+                    <th onClick={() => onHeaderClick("region")}>Region</th>
+                    <th onClick={() => onHeaderClick("total_spend")}>Total Spend</th>
+                    <th onClick={() => onHeaderClick("churned")}>Churn</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredSorted.map((c) => (
+                    <tr key={c.customer_id}>
+                      <td>{c.name}</td>
+                      <td>{c.region}</td>
+                      <td>{Number(c.total_spend).toFixed(2)}</td>
+                      <td>
+                        <span
+                          className={
+                            "badge " + (c.churned ? "badge-warn" : "badge-ok")
+                          }
+                        >
+                          {c.churned ? "Churned" : "Active"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        );
+      }
+
+      function CategoryCard() {
+        const [data, setData] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState("");
+        const chartRef = useRef(null);
+        const chartInstanceRef = useRef(null);
+
+        useEffect(() => {
+          let cancelled = false;
+          setLoading(true);
+          fetchJson("/api/categories")
+            .then((d) => {
+              if (cancelled) return;
+              setData(d);
+              setError("");
+            })
+            .catch((e) => {
+              if (cancelled) return;
+              setError(`Failed to load (${e.message})`);
+            })
+            .finally(() => {
+              if (!cancelled) setLoading(false);
+            });
+          return () => {
+            cancelled = true;
+          };
+        }, []);
+
+        useEffect(() => {
+          if (!chartRef.current) return;
+          const labels = data.map((d) => d.category);
+          const values = data.map((d) => Number(d.total_revenue));
+          if (chartInstanceRef.current) {
+            chartInstanceRef.current.data.labels = labels;
+            chartInstanceRef.current.data.datasets[0].data = values;
+            chartInstanceRef.current.update();
+            return;
+          }
+          chartInstanceRef.current = new Chart(chartRef.current, {
+            type: "bar",
+            data: {
+              labels,
+              datasets: [
+                {
+                  label: "Revenue",
+                  data: values,
+                  backgroundColor: ["#38bdf8", "#a855f7", "#f97316", "#22c55e"],
+                },
+              ],
+            },
+            options: {
+              plugins: { legend: { display: false } },
+              scales: {
+                x: { ticks: { color: "#9ca3af" } },
+                y: { ticks: { color: "#9ca3af" } },
+              },
+            },
+          });
+        }, [data]);
+
+        useEffect(() => {
+          return () => {
+            if (chartInstanceRef.current) {
+              chartInstanceRef.current.destroy();
+            }
+          };
+        }, []);
+
+        return (
+          <section className="card">
+            <h2>Category Breakdown</h2>
+            <div className="status">
+              {loading && "Loading categories…"}
+              {!loading && error && <span style={{ color: "#fca5a5" }}>{error}</span>}
+            </div>
+            <canvas ref={chartRef} height="180" />
+          </section>
+        );
+      }
+
+      function RegionsCard() {
+        const [data, setData] = useState([]);
+        const [loading, setLoading] = useState(true);
+        const [error, setError] = useState("");
+
+        useEffect(() => {
+          let cancelled = false;
+          setLoading(true);
+          fetchJson("/api/regions")
+            .then((d) => {
+              if (cancelled) return;
+              setData(d);
+              setError("");
+            })
+            .catch((e) => {
+              if (cancelled) return;
+              setError(`Failed to load (${e.message})`);
+            })
+            .finally(() => {
+              if (!cancelled) setLoading(false);
+            });
+          return () => {
+            cancelled = true;
+          };
+        }, []);
+
+        return (
+          <section className="card">
+            <h2>Region Summary</h2>
+            <div className="status">
+              {loading && "Loading regions…"}
+              {!loading && error && <span style={{ color: "#fca5a5" }}>{error}</span>}
+            </div>
+            <table>
+              <thead>
+                <tr>
+                  <th>Region</th>
+                  <th>Customers</th>
+                  <th>Orders</th>
+                  <th>Total Revenue</th>
+                  <th>Avg / Customer</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.map((r) => (
+                  <tr key={r.region}>
+                    <td>{r.region}</td>
+                    <td>{r.number_of_customers}</td>
+                    <td>{r.number_of_orders}</td>
+                    <td>{Number(r.total_revenue).toFixed(2)}</td>
+                    <td>
+                      {Number(r.avg_revenue_per_customer || 0).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+        );
+      }
+
+      function Dashboard() {
+        return (
+          <div className="grid">
+            <RevenueCard />
+            <TopCustomersCard />
+            <CategoryCard />
+            <RegionsCard />
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById("root"));
+      root.render(<Dashboard />);
+    </script>
+  </body>
+</html>
+

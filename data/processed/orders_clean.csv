@@ -1,0 +1,4 @@
+order_id,customer_id,product,amount,order_date,status,order_year_month
+100.0,1.0,Widget A,100.0,2024-01-16,completed,2024-01
+101.0,1.0,Widget B,75.25,2024-01-16,completed,2024-01
+102.0,2.0,Widget A,50.5,2024-01-17,pending,2024-01

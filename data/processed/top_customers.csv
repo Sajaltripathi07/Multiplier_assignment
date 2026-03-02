@@ -1,0 +1,2 @@
+customer_id,name,region,total_spend,churned
+1.0,Alice Smith,North,175.25,False
