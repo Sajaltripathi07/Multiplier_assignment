@@ -1,4 +1,4 @@
-# Technical Round Assignment - Data Pipeline & Dashboard
+# Technical Assignment - Data Pipeline & Dashboard
 
 ## Project Structure
 
